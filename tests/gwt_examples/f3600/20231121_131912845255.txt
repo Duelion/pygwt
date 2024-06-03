@@ -1,0 +1,1 @@
+//OK[3,2,1,1,["java.util.Vector/3057315478","java.lang.String/2004016611","El SII autorizó a la Tesorería General de la República a efectuar la devolución total, por 74822125 Pesos, solicitada por Ud."],0,7]
