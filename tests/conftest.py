@@ -8,17 +8,14 @@ from pygwt import models
 from pygwt.parser import GwtParser
 
 
-def f29_gwt_texts():
+def f29_gwt_files():
     current = pathlib.Path(__file__).parent
     examples = current / "gwt_examples"
     files = examples.rglob("*.txt")
-    texts = [file.read_text() for file in files]
-    texts = [text for text in texts]
-    # texts = [texts[6]]
-    return texts
+    return files
 
-@pytest.fixture(params=f29_gwt_texts())
-def f29_gwt_text(request):
+@pytest.fixture(params=f29_gwt_files())
+def f29_gwt_file(request):
     return request.param
 
 
