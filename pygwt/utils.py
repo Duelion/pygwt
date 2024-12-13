@@ -51,7 +51,7 @@ def gwt_spliter(text: str) -> tuple[str, list, list]:
     data = data.replace(r"\"", r"\'")
     data = data.encode('latin1', 'ignore').decode('unicode_escape')
     head, tail = data.split(",[")
-    head = re.sub("'([\w$]+?)'", r'"\1"', head)
+    head = re.sub(r"'([\w$]+?)'", r'"\1"', head)
     tail = tail.replace('"+"', '')  # Por alguna razon ciertas plabras las concatenan dentro de la string, por lo que hay que borrar los "+"
     data = f"{head},[{tail}"
     data = json.loads(data, strict=False)
