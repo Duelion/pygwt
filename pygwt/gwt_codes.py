@@ -32,7 +32,7 @@ class GwtCodes(ABC):
     def strong_name(self):
         now = time.time()
         time_delta = now - self.updated_at
-        if time_delta > 24 * 60 * 60:  # 24*60*60: # un dia en segundos
+        if time_delta > 24 * 60 * 60:  # un dia en segundos
             self.update()
         return self._strong_name
 
@@ -46,9 +46,9 @@ class GwtCodes(ABC):
         url = f'https://www4.sii.cl/{self.endpoint}Internet/{self.endpoint}.nocache.js'
         r = requests.get(url)
         text = r.text
-        browser_var = re.findall(f"(\w+)='{self.browser}'", text)[0]
-        gwt_permutation_var = re.findall(f"\[{browser_var}\],(\w+)", text)[0]
-        gwt_permutation = re.findall(f"{gwt_permutation_var}='(\w+)'", text)[0]
+        browser_var = re.findall(rf"(\w+)='{self.browser}'", text)[0]
+        gwt_permutation_var = re.findall(rf"\[{browser_var}\],(\w+)", text)[0]
+        gwt_permutation = re.findall(rf"{gwt_permutation_var}='(\w+)'", text)[0]
         return gwt_permutation
 
     @abstractmethod
@@ -66,8 +66,8 @@ class SifmConsulta(GwtCodes):
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
         r = requests.get(url)
         text = r.text
-        browser_var = re.findall(f"(\w+)='svcConsulta'", text)[0]
-        strong_name = re.findall(f"{browser_var},'(\w+)'", text)[0]
+        browser_var = re.findall(r"(\w+)='svcConsulta'", text)[0]
+        strong_name = re.findall(rf"{browser_var},'(\w+)'", text)[0]
         return strong_name
 
 
@@ -81,7 +81,7 @@ class Rfi(GwtCodes):
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
         r = requests.get(url)
         text = r.text
-        pattern = "'formularioFacade','([A-Z0-9]{32})'"
+        pattern = r"'formularioFacade','([A-Z0-9]{32})'"
         strong_names = re.findall(pattern, text)
         strong_name = strong_names[0]
         return strong_name
