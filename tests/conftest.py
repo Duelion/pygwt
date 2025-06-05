@@ -8,15 +8,20 @@ from pygwt import models
 from pygwt.parser import GwtParser
 
 
-def f29_gwt_files():
+def gwt_files():
     current = pathlib.Path(__file__).parent
     examples = current / "gwt_examples"
     files = examples.rglob("*.txt")
     return files
 
-@pytest.fixture(params=f29_gwt_files())
-def f29_gwt_file(request):
+@pytest.fixture(params=gwt_files())
+def gwt_file(request):
     return request.param
+
+@pytest.fixture
+def target_file():
+    file = pathlib.Path(r"C:\Users\fsoza\PycharmProjects\pygwt\tests\gwt_examples\f29\new_test_1.txt")
+    return file
 
 
 
@@ -300,4 +305,4 @@ class FormularioInterno(BaseModel):
     unknown_64: Any
     unknown_65: Any
     unknown_66: str | None
-    unknown_67: int | None
+    unknown_67: str | None

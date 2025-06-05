@@ -50,8 +50,11 @@ class TimeStamp(BaseBuiltIn):
 
     @computed_field
     def value(self) -> datetime:
-        value = decoder(self.raw)
-        timestamp = datetime.fromtimestamp(value / 1000.0)
+        if "/" in self.raw:
+            timestamp = datetime.strptime(s, '%d/%m/%Y %H:%M:%S')
+        else:
+            value = decoder(self.raw)
+            timestamp = datetime.fromtimestamp(value / 1000.0)
         return timestamp
 
 

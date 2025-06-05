@@ -13,9 +13,20 @@ def test_get_codes():
     sifm_strong_name = sifm_consulta.get_strong_name()
     print(1)
 
-def test_gwt(f29_gwt_file, gwt_models):
-    text = f29_gwt_file.read_text()
+def test_gwt(gwt_file, gwt_models):
+    text = gwt_file.read_text()
     parser = GwtParser(text, gwt_models)
     result = parser.parse()
     print()
 
+def test_gwt(gwt_file, gwt_models):
+    text = gwt_file.read_text()
+    parser = GwtParser(text, gwt_models)
+    result = parser.parse()
+    print()
+
+def test_target_gwt(target_file, gwt_models):
+    text = target_file.read_text()
+    parser = GwtParser(text, gwt_models)
+    result = parser.parse()
+    print()
