@@ -4,6 +4,24 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+
+
+class SimpleReprModel(BaseModel):
+    """Base model that hides nested Pydantic models in its representation."""
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        parts = []
+        for field, value in self.__dict__.items():
+            if isinstance(value, BaseModel):
+                continue
+            if isinstance(value, list) and any(isinstance(i, BaseModel) for i in value):
+                continue
+            parts.append(f"{field}={value!r}")
+        args = ", ".join(parts)
+        return f"{self.__class__.__name__}({args})"
+
+    __str__ = __repr__
+
 from pygwt import models
 from pygwt.parser import GwtParser
 
@@ -45,7 +63,7 @@ def gwt_models():
     }
     return gwt_models
 
-class AplicacionesTO(BaseModel):
+class AplicacionesTO(SimpleReprModel):
     codigo: int
     unknown_01: Any
     unknown_02: Any
@@ -55,7 +73,7 @@ class AplicacionesTO(BaseModel):
     unknown_06: Any
 
 
-class EventosDeclaracionTO(BaseModel):
+class EventosDeclaracionTO(SimpleReprModel):
     codigo: str
     descripcion: str
     tipo: str
@@ -79,7 +97,7 @@ class EventosDeclaracionTO(BaseModel):
     AplicacionesTO: AplicacionesTO | None
 
 
-class FolioPeriodoFormularioTO(BaseModel):
+class FolioPeriodoFormularioTO(SimpleReprModel):
     year: int
     unknown_01: Any
     unknown_02: Any
@@ -119,7 +137,7 @@ class FolioPeriodoFormularioTO(BaseModel):
     unknown_36: Any
     unknown_37: Any
 
-class DeclaracionCnEstados(BaseModel):
+class DeclaracionCnEstados(SimpleReprModel):
     unknown_00: Any
     unknown_01: Any
     unknown_02: Any
@@ -153,7 +171,7 @@ class DeclaracionCnEstados(BaseModel):
     unknown_30: Any
     unknown_31: Any
 
-class ObservacionesCruceTO(BaseModel):
+class ObservacionesCruceTO(SimpleReprModel):
     unknown_00: Any
     corr: models.Long
     codigo: str
@@ -165,7 +183,7 @@ class ObservacionesCruceTO(BaseModel):
     unknown_08: Any
     codigo_estado: str
 
-class BorradorCnFecha(BaseModel):
+class BorradorCnFecha(SimpleReprModel):
     unknown_00: int
     unknown_01: Any
     fecha: models.TimeStamp
@@ -178,7 +196,7 @@ class BorradorCnFecha(BaseModel):
     unknown_09: Any
     xml: models.Xml
 
-class EventoFormInterno(BaseModel):
+class EventoFormInterno(SimpleReprModel):
     codigo: models.Long
     descripcion: str
     unknown_02: Any
@@ -203,7 +221,7 @@ class EventoFormInterno(BaseModel):
     unknown_21: Any
     unknown_22: Any
 
-class DatosDeclaracionAnulada(BaseModel):
+class DatosDeclaracionAnulada(SimpleReprModel):
     unknown_00: models.Long
     folio: models.Long
     periodo: int
@@ -212,7 +230,7 @@ class DatosDeclaracionAnulada(BaseModel):
     unknown_05: int
     unknown_06: Any
 
-class SidAtencion(BaseModel):
+class SidAtencion(SimpleReprModel):
     unknown_00: str
     unknown_01: models.Long
     unknown_02: Any
@@ -230,16 +248,16 @@ class SidAtencion(BaseModel):
     unknown_14: models.Long
     unknown_15: int
 
-class SidTipoAccion(BaseModel):
+class SidTipoAccion(SimpleReprModel):
     unknown_00: str
     unknown_02: int
     unknown_03: str
     atencion: SidAtencion
 
-class DatosNotificacion(BaseModel):
+class DatosNotificacion(SimpleReprModel):
     accion: list[SidTipoAccion]
 
-class FormularioInterno(BaseModel):
+class FormularioInterno(SimpleReprModel):
     unknown_00: str | None
     unknown_01: Any
     unknown_02: Any
