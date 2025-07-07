@@ -9,12 +9,6 @@ PyGWT decodes responses produced by the Google Web Toolkit (GWT) RPC system. It 
 - **Utilities** – tools for splitting raw responses and for base64 encoding/decoding.
 - **GwtCodes** – utilities to fetch the permutation tokens and strong names required to craft requests.
 
-## Installation
-
-```bash
-pip install pygwt
-```
-
 ## Basic usage
 
 ```python
