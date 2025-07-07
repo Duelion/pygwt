@@ -41,7 +41,7 @@ class GwtCodes(ABC):
     def gwt_permutation(self):
         now = time.time()
         time_delta = now - self.updated_at
-        if time_delta > 60 * 60:  # cada una hora
+        if time_delta > 60 * 60:  # refresh every hour
             self.update()
         return self._gwt_permutation
 
@@ -49,7 +49,7 @@ class GwtCodes(ABC):
     def strong_name(self):
         now = time.time()
         time_delta = now - self.updated_at
-        if time_delta > 24 * 60 * 60:  # un dia en segundos
+        if time_delta > 24 * 60 * 60:  # refresh daily
             self.update()
         return self._strong_name
 
@@ -59,7 +59,7 @@ class GwtCodes(ABC):
         self.updated_at = time.time()
 
     def get_gwt_permutation(self):
-        """ """
+        """Fetch the current permutation token used by the GWT frontend."""
         url = f'https://www4.sii.cl/{self.endpoint}Internet/{self.endpoint}.nocache.js'
         r = requests.get(url, headers=HEADERS)
         text = r.text
@@ -70,7 +70,7 @@ class GwtCodes(ABC):
 
     @abstractmethod
     def get_strong_name(self):
-        ...
+        """Return the strong name used to construct RPC requests."""
 
 
 class SifmConsulta(GwtCodes):
@@ -79,7 +79,7 @@ class SifmConsulta(GwtCodes):
         super(SifmConsulta, self).__init__(endpoint=Endpoint.sifm_consulta.value)
 
     def get_strong_name(self):
-        """ """
+        """Retrieve the strong name for the ``sifmConsulta`` service."""
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
         r = requests.get(url, headers=HEADERS)
         text = r.text
@@ -94,7 +94,7 @@ class Rfi(GwtCodes):
         super(Rfi, self).__init__(endpoint=Endpoint.rfi.value)
 
     def get_strong_name(self):
-        """ """
+        """Retrieve the strong name for the ``rfi`` service."""
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
         r = requests.get(url, headers=HEADERS)
         text = r.text
