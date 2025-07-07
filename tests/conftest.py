@@ -13,8 +13,15 @@ class SimpleReprModel(BaseModel):
         parts = []
         for field, value in self.__dict__.items():
             if isinstance(value, BaseModel):
+                parts.append(f"{field}={value.__class__.__name__}(...)")
                 continue
             if isinstance(value, list) and any(isinstance(i, BaseModel) for i in value):
+                model = next((i for i in value if isinstance(i, BaseModel)), None)
+                if model is not None:
+                    class_name = model.__class__.__name__
+                    parts.append(f"{field}=[{class_name}(...)]")
+                else:
+                    parts.append(f"{field}=[...]")
                 continue
             parts.append(f"{field}={value!r}")
         args = ", ".join(parts)
