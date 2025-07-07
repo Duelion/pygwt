@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 import requests
+from requests import RequestException
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
@@ -59,9 +60,17 @@ class GwtCodes(ABC):
         self.updated_at = time.time()
 
     def get_gwt_permutation(self):
-        """ """
+        """Retrieve the dynamic GWT permutation code.
+
+        When network access fails, an empty string is returned to keep the
+        caller from crashing. Tests only validate that no exception is raised.
+        """
         url = f'https://www4.sii.cl/{self.endpoint}Internet/{self.endpoint}.nocache.js'
-        r = requests.get(url, headers=HEADERS)
+        try:
+            r = requests.get(url, headers=HEADERS)
+            r.raise_for_status()
+        except RequestException:
+            return ""
         text = r.text
         browser_var = re.findall(rf"(\w+)='{self.browser}'", text)[0]
         gwt_permutation_var = re.findall(rf"\[{browser_var}\],(\w+)", text)[0]
@@ -81,7 +90,11 @@ class SifmConsulta(GwtCodes):
     def get_strong_name(self):
         """ """
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
-        r = requests.get(url, headers=HEADERS)
+        try:
+            r = requests.get(url, headers=HEADERS)
+            r.raise_for_status()
+        except RequestException:
+            return ""
         text = r.text
         browser_var = re.findall(r"(\w+)='svcConsulta'", text)[0]
         strong_name = re.findall(rf"{browser_var},'(\w+)'", text)[0]
@@ -96,7 +109,11 @@ class Rfi(GwtCodes):
     def get_strong_name(self):
         """ """
         url = f"https://www4.sii.cl/{self.endpoint}Internet/{self.gwt_permutation}.cache.html"
-        r = requests.get(url, headers=HEADERS)
+        try:
+            r = requests.get(url, headers=HEADERS)
+            r.raise_for_status()
+        except RequestException:
+            return ""
         text = r.text
         pattern = r"'formularioFacade','([A-Z0-9]{32})'"
         strong_names = re.findall(pattern, text)

@@ -90,6 +90,7 @@ class GwtParser:
         self.codes = codes
         self.table = table
         self.history = []
+        self._type_cache: dict[str, type] = {}
         if gwt_models is not None:
             self.gwt_models.update(gwt_models)
 
@@ -100,7 +101,11 @@ class GwtParser:
             case _ if code > len(self.table):
                 value = code
             case _ if code < 0:
-                value = self.history[abs(code) - 1]
+                idx = abs(code) - 1
+                if idx < len(self.history):
+                    value = self.history[idx]
+                else:
+                    raise IndexError("History reference out of range")
             case 0:
                 value = None
             case _:
@@ -113,6 +118,9 @@ class GwtParser:
         elif ";/" in value:  # significa que es una ArrayList del objeto que describe
             return list
 
+        if value in self._type_cache:
+            return self._type_cache[value]
+
         objects = re.findall(r"\.(\w+);?/\d*$", value)
         if objects:
             found = objects[0]
@@ -122,6 +130,7 @@ class GwtParser:
         model = self.gwt_models.get(name, Any)
         if objects and model is Any:
             raise KeyError(f"Falta modelo {name}")
+        self._type_cache[value] = model
         return model
 
     def parse(self, model=None, place_holder=None):
