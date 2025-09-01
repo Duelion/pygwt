@@ -6,26 +6,53 @@ from typing import get_args, get_origin
 from pydantic import BaseModel
 
 
+# Alphabet used by GWT for its custom base64 encoding.
+# Defining it once avoids repeating the long literal in ``encoder`` and
+# ``decoder`` and allows us to pre-compute an efficient lookup table.
+GWT_KEY_STRING = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$_"
+GWT_KEY_MAP = {char: index for index, char in enumerate(GWT_KEY_STRING)}
+
+
 def encoder(integer: int) -> str:
-    """Encode *integer* using the base64 alphabet employed by GWT."""
-    key_string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$_"
-    result = ""
+    """Encode *integer* using the base64 alphabet employed by GWT.
+
+    Raises:
+        ValueError: If ``integer`` is negative.
+    """
+
     integer = int(integer)
+    if integer < 0:
+        raise ValueError("encoder expects a non-negative integer")
     if integer == 0:
-        return key_string[0]
+        return GWT_KEY_STRING[0]
+
+    result = ""
     while integer > 0:
         integer, remainder = divmod(integer, 64)  # divide by 64 to obtain the quotient
-        result = key_string[remainder] + result  # encode the remainder
+        result = GWT_KEY_STRING[remainder] + result  # encode the remainder
     return result
 
 
 def decoder(string: str) -> int:
-    """Decode a base64 *string* produced by :func:`encoder`."""
-    key_string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$_"
+    """Decode a base64 *string* produced by :func:`encoder`.
+
+    Raises:
+        ValueError: If ``string`` is empty or contains characters outside the
+            GWT alphabet.
+    """
+
+    if not string:
+        raise ValueError("decoder expects a non-empty string")
+
     result = 0
-    string = reversed(string)  # reverse to process from least significant digit
-    for position, letter in enumerate(string):
-        result += key_string.index(letter) * (64 ** position)  # convert base64 to base10
+    # process from least significant digit
+    for position, letter in enumerate(reversed(string)):
+        # ``GWT_KEY_MAP`` provides O(1) lookups versus ``str.index`` (O(n)).
+        try:
+            value = GWT_KEY_MAP[letter]
+        except KeyError as exc:
+            raise ValueError(f"invalid base64 character: {letter}") from exc
+        result += value * (64 ** position)  # convert base64 to base10
     return result
 
 
