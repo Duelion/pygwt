@@ -22,10 +22,13 @@ class BaseBuiltIn(BaseModel, metaclass=ABCMeta):
 
 class Long(BaseBuiltIn):
     """Integer encoded as base64 by GWT."""
+
     raw: str
 
     @computed_field
-    def value(self) -> float:
+    def value(self) -> int:
+        """Return the decoded integer value."""
+
         return decoder(self.raw)
 
 

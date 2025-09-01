@@ -142,18 +142,15 @@ class GwtParser:
 
     def get_code_value(self, code: Any) -> Any:
         """Translate a raw *code* from ``self.codes`` into its Python value."""
-        match code:
-            case str():
-                value = code
-            case _ if code > len(self.table):
-                value = code
-            case _ if code < 0:
-                value = self.history[abs(code) - 1]
-            case 0:
-                value = None
-            case _:
-                value = self.table[code - 1]
-        return value
+        if isinstance(code, str):
+            return code
+        if code == 0:
+            return None
+        if code < 0:
+            return self.history[abs(code) - 1]
+        if code <= len(self.table):
+            return self.table[code - 1]
+        return code
 
     def parse_model_type(self, value: Any) -> type | Any:
         """Return the Python type referenced by *value* from ``self.table``."""
