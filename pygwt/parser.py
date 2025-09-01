@@ -187,6 +187,92 @@ class GwtParser:
         else:
             parent.payload[frame.key] = result
 
+    # ------------------------------------------------------------------
+    # Stage handlers
+    # ------------------------------------------------------------------
+    def _handle_start(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.START`` frame."""
+
+        code = self.codes.pop()
+        value = self.get_code_value(code)
+
+        if isinstance(code, int) and code < 0:
+            self._finalize(frame, value, stack, root)
+            return
+
+        parsed_model = self.parse_model_type(value)
+        container, model = separate_annotation(frame.model)
+        model = container if container else model
+
+        if parsed_model is not Any:
+            if model is Any or model is None:
+                model = parsed_model
+            if model is not parsed_model:
+                value = code
+                parsed_model = Any
+            if (
+                not issubclass(parsed_model, BaseModel)
+                and parsed_model is not list
+                and parsed_model is not Any
+            ):
+                value = self.codes.pop()
+                if parsed_model is str:
+                    value = self.get_code_value(value)
+
+        if parsed_model is not Any:
+            frame.placeholder = len(self.history)
+            self.history.append(f"placeholder_{model}")
+
+        if value is None:
+            self._finalize(frame, None, stack, root)
+            return
+
+        if model is list:
+            length = self.codes.pop()
+            frame.stage = Stage.LIST
+            frame.length = length
+            frame.results = []
+            frame.index = 0
+        elif isinstance(model, type) and issubclass(model, BaseModel):
+            if parsed_model is Any:
+                self.codes.append(code)
+            fields = get_pydantic_fields(model)
+            frame.stage = Stage.OBJ
+            frame.fields = list(fields.items())
+            frame.payload = {}
+            frame.index = 0
+            frame.model_class = model
+        else:
+            result = model(value) if model is not Any and value is not None else value
+            self._finalize(frame, result, stack, root)
+
+    def _handle_list(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.LIST`` frame."""
+
+        if frame.index >= frame.length:
+            self._finalize(frame, frame.results, stack, root)
+            return
+
+        code = self.codes[-1]
+        value = self.get_code_value(code)
+        model = self.parse_model_type(value)
+        frame.index += 1
+        stack.append(Frame(stage=Stage.START, model=model, parent=frame))
+
+    def _handle_obj(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.OBJ`` frame."""
+
+        if frame.index >= len(frame.fields):
+            obj = frame.model_class(**frame.payload)
+            self._finalize(frame, obj, stack, root)
+            return
+
+        field, annotation = frame.fields[frame.index]
+        frame.index += 1
+        stack.append(
+            Frame(stage=Stage.START, model=annotation, parent=frame, key=field)
+        )
+
     def parse(self, model: Any | None = None) -> Any:
         """Decode the next value from ``self.codes`` using an optional annotation."""
         if not self.table:
@@ -197,83 +283,11 @@ class GwtParser:
 
         while stack:
             frame = stack[-1]
-
             if frame.stage is Stage.START:
-                code = self.codes.pop()
-                value = self.get_code_value(code)
-
-                if isinstance(code, int) and code < 0:
-                    self._finalize(frame, value, stack, root)
-                    continue
-
-                parsed_model = self.parse_model_type(value)
-                container, model = separate_annotation(frame.model)
-                model = container if container else model
-
-                if parsed_model is not Any:
-                    if model is Any or model is None:
-                        model = parsed_model
-                    if model is not parsed_model:
-                        value = code
-                        parsed_model = Any
-                    if (
-                        not issubclass(parsed_model, BaseModel)
-                        and parsed_model is not list
-                        and parsed_model is not Any
-                    ):
-                        value = self.codes.pop()
-                        if parsed_model is str:
-                            value = self.get_code_value(value)
-
-                if parsed_model is not Any:
-                    frame.placeholder = len(self.history)
-                    self.history.append(f"placeholder_{model}")
-
-                if value is None:
-                    self._finalize(frame, None, stack, root)
-                    continue
-
-                if model is list:
-                    length = self.codes.pop()
-                    frame.stage = Stage.LIST
-                    frame.length = length
-                    frame.results = []
-                    frame.index = 0
-                elif isinstance(model, type) and issubclass(model, BaseModel):
-                    if parsed_model is Any:
-                        self.codes.append(code)
-                    fields = get_pydantic_fields(model)
-                    frame.stage = Stage.OBJ
-                    frame.fields = list(fields.items())
-                    frame.payload = {}
-                    frame.index = 0
-                    frame.model_class = model
-                else:
-                    result = model(value) if model is not Any and value is not None else value
-                    self._finalize(frame, result, stack, root)
-                    continue
-
+                self._handle_start(frame, stack, root)
             elif frame.stage is Stage.LIST:
-                if frame.index >= frame.length:
-                    self._finalize(frame, frame.results, stack, root)
-                    continue
-                else:
-                    code = self.codes[-1]
-                    value = self.get_code_value(code)
-                    model = self.parse_model_type(value)
-                    frame.index += 1
-                    stack.append(Frame(stage=Stage.START, model=model, parent=frame))
-                    continue
-
-            elif frame.stage is Stage.OBJ:
-                if frame.index >= len(frame.fields):
-                    obj = frame.model_class(**frame.payload)
-                    self._finalize(frame, obj, stack, root)
-                    continue
-                else:
-                    field, annotation = frame.fields[frame.index]
-                    frame.index += 1
-                    stack.append(Frame(stage=Stage.START, model=annotation, parent=frame, key=field))
-                    continue
+                self._handle_list(frame, stack, root)
+            else:
+                self._handle_obj(frame, stack, root)
 
         return root[0]
