@@ -20,7 +20,8 @@ def gwt_file(request):
 
 @pytest.fixture
 def target_file():
-    file = pathlib.Path(r"C:\Users\fsoza\PycharmProjects\pygwt\tests\gwt_examples\f29\new_test_2.txt")
+    current = pathlib.Path(__file__).parent
+    file = current / "gwt_examples" / "f29" / "new_test_2.txt"
     return file
 
 
