@@ -190,10 +190,6 @@ class GwtParser:
     def _handle_start(self, frame: Frame, stack: deque[Frame], root: list) -> None:
         """Process a ``Stage.START`` frame."""
 
-        if not self.codes:
-            self._finalize(frame, None, stack, root)
-            return
-
         code = self.codes.pop()
         value = self.get_code_value(code)
 
@@ -251,10 +247,6 @@ class GwtParser:
         """Process a ``Stage.LIST`` frame."""
 
         if frame.index >= frame.length:
-            self._finalize(frame, frame.results, stack, root)
-            return
-
-        if not self.codes:
             self._finalize(frame, frame.results, stack, root)
             return
 
