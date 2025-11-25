@@ -119,7 +119,7 @@ class FolioPeriodoFormularioTO(BaseModel):
 
 class DeclaracionCnEstados(BaseModel):
     unknown_00: Any
-    unknown_01: Any
+    unknown_01: str | None
     unknown_02: Any
     unknown_03: Any
     unknown_04: Any
@@ -133,7 +133,7 @@ class DeclaracionCnEstados(BaseModel):
     unknown_12: Any
     unknown_13: Any
     unknown_14: Any
-    unknown_15: Any
+    unknown_15: int | None
     xml: models.Xml | None
     html: str | None
     code_a: int | None
