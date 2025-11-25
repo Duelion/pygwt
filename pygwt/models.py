@@ -8,6 +8,7 @@ from pygwt.utils import decoder
 
 
 class BaseBuiltIn(BaseModel, metaclass=ABCMeta):
+    """Base class for custom wrappers around primitive GWT types."""
 
     @model_serializer
     def serializer(self):
@@ -20,14 +21,19 @@ class BaseBuiltIn(BaseModel, metaclass=ABCMeta):
 
 
 class Long(BaseBuiltIn):
+    """Integer encoded as base64 by GWT."""
+
     raw: str
 
     @computed_field
-    def value(self) -> float:
+    def value(self) -> int:
+        """Return the decoded integer value."""
+
         return decoder(self.raw)
 
 
 class Bool(BaseBuiltIn):
+    """Boolean value encoded as ``0`` or ``1``."""
     raw: int
 
     @computed_field
@@ -36,15 +42,17 @@ class Bool(BaseBuiltIn):
 
 
 class Date(BaseBuiltIn):
+    """Date string in ``dd/mm/yyyy`` or ``dd/mm/yyyy HH:MM:SS`` format."""
     raw: str
 
     @computed_field
     def value(self) -> date:
         pattern = "%d/%m/%Y" if len(self.raw) == 10 else "%d/%m/%Y %H:%M:%S"
-        fecha = datetime.strptime(self.raw, pattern)
-        return fecha.date()
+        parsed = datetime.strptime(self.raw, pattern)
+        return parsed.date()
 
 class TimeStamp(BaseBuiltIn):
+    """Epoch timestamp encoded as milliseconds or formatted string."""
     raw: str
     ignore: Any
 
@@ -59,6 +67,7 @@ class TimeStamp(BaseBuiltIn):
 
 
 class Xml(BaseBuiltIn):
+    """XML string escaped with Java conventions."""
     raw: str
 
     @computed_field

@@ -1,179 +1,290 @@
+from __future__ import annotations
+
 import re
+from collections import deque
+from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any
 
 from pydantic import BaseModel
 
 from pygwt import models
-from pygwt.utils import gwt_spliter, get_pydantic_fields, separate_annotation
+from pygwt.utils import gwt_splitter, get_pydantic_fields, separate_annotation
 
 # -------------------------------------------------------------------------- #
-#                    DECODIFICADOR DE RESPUESTAS GWT-RPC                     #
+#                          GWT-RPC RESPONSE DECODER                          #
 # -------------------------------------------------------------------------- #
 
-"""
-Utiliza los modelos definidos en gwt_models.py para recursivamente decodificar las respuestas GWT-RPC.
+"""Utilities for decoding GWT-RPC responses.
 
-GWT (Google Web Toolkit): es un generador de javascript, convierte código java a javascript. Usado para crear AJAX.
-GWT-RPC (Remote Procedure Call): permite enviar objetos java por HTTP, serializandolos con un formato especifico.
-"""
+The parser reads a reversed sequence of integers and strings that encode Java
+objects. A ``gwt_models`` mapping translates Java class names to Python types
+so objects can be reconstructed while parsing.
 
-# ----------------------  Ejemplo respuestas GWT-RPC  ---------------------- #
-"""
-Usare la siguiente seccion para documentar como se decodifica una respuesta GWT-RCP.
+GWT (Google Web Toolkit) compiles Java code into JavaScript to build AJAX
+applications. GWT-RPC (Remote Procedure Call) serializes Java objects so they
+can be transmitted via HTTP. The parser relies on custom Pydantic models to
+recreate those Java objects in Python.
 
-Respuesta en bruto: 
-//OK[-8,-8,4,24,23,22,-8,'xV3',5,21,20,'mtMu9',5,'xV3',5,'X4A$',5,19,0,18,'GrnIrm',5,17,'A',5,0,3,3,16,15,14,1,3,13,12,
-11,10,9,8,0,7,'PPYxC',5,6,'EkeqE',5,4,2021,3,2,1,1,["java.util.Vector/3057315478",
-"cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399","java.lang.Integer/3438268394","2",
-"java.lang.Long/4227064769","SINOBS","DRCP","Vigente","AMBOS","29",
-"F29 - Declaración Mensual y Pago Simultáneo de Impuestos","Declaración Mensual y Pago Simultáneo de Impuestos","MES",
-"DPS","G1515000gym","MPD_PLANT","16/04/2021","669642240","CLP","2021-04-19 18:42:20.0","N","OPVPHHA","M03","CRCIVA"],0,7]
+The following example illustrates how to decode a response:
 
+Raw response::
 
-Respuesta separada en partes:
-#Estatus de respuesta, //EX en caso de error (status)
-//OK
-# Data de respuesta
-[
-    # Instrucciones (codes) para leer tabla
-    -3,-8,4,24,23,22,-8,'xV3',5,21,20,'mtMu9',5,'xV3',5,'X4A$',5,19,0,18,'GrnIrm',5,17,'A',5,0,3,3,16,15,14,1,3,13,12,11,10,9,8,0,7,'PPYxC',5,6,'EkeqE',5,4,2021,3,2,1,1,
-        [
-            # Tabla (table) de referencia que es ledia dependiendo de los codigos anteriores
-            "java.util.Vector/3057315478","cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399",
-            "java.lang.Integer/3438268394","2","java.lang.Long/4227064769","SINOBS","DRCP","Vigente","AMBOS","29",
-            "F29 - Declaración Mensual y Pago Simultáneo de Impuestos","Declaración Mensual y Pago Simultáneo de Impuestos","MES",
-            "DPS","G1515000gym","MPD_PLANT","16/04/2021","669642240","CLP","2021-04-19 18:42:20.0","N","OPVPHHA","M03","CRCIVA"
-        ]
-    # Si hay flags en la respuesta (no es relevante por lo que he visto)
-    ,0
-    # Version del protocolo GWT (no es relevante por lo que he visto)
-    ,7
-]
+    //OK[-8,-8,4,24,23,22,-8,'xV3',5,21,20,'mtMu9',5,'xV3',5,'X4A$',5,19,0,
+    18,'GrnIrm',5,17,'A',5,0,3,3,16,15,14,1,3,13,12,11,10,9,8,0,7,'PPYxC',5,
+    6,'EkeqE',5,4,2021,3,2,1,1,["java.util.Vector/3057315478",
+    "cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399",
+    "java.lang.Integer/3438268394","2","java.lang.Long/4227064769","SINOBS",
+    "DRCP","Vigente","AMBOS","29",
+    "F29 - Declaración Mensual y Pago Simultáneo de Impuestos",
+    "Declaración Mensual y Pago Simultáneo de Impuestos","MES","DPS",
+    "G1515000gym","MPD_PLANT","16/04/2021","669642240","CLP",
+    "2021-04-19 18:42:20.0","N","OPVPHHA","M03","CRCIVA"],0,7]
 
-Instrucciones:
-    1- La data de respuesta se debe leer de atraz en adelante. en este caso es 7, 0, tabla, 1, 1, 2, 3, ... , -3.
-    2- La tabla es una referencia, con la cual se decodifican las instrucciones.
-    3- Las instrucciones tienen los siguientes significados:
-        0: None
-        0<x<len(tabla): indice del valor en la tabla de referencia (parte desde 1).
-        texto: valor numerico codificado en Base64
-        0>x: referencia a que el objeto ya fue decodificado anteriormente, en el lugar abs(x) del historial.
-    4- Cuando el item leido de la tabla es un objeto java, los siguientes codigos definen los argumentos que lo componen,
-    solo es posible saber el numero de argumentos conociendo la composicion del objeto.
+Separated parts::
 
-Ejemplo (partiendo desde las instrucciones):
+    # Response status, ``//EX`` indicates an error
+    //OK
+    # Response data
+    [
+        # Instructions (codes) for reading the table
+        -3,-8,4,24,23,22,-8,'xV3',5,21,20,'mtMu9',5,'xV3',5,'X4A$',5,19,0,
+        18,'GrnIrm',5,17,'A',5,0,3,3,16,15,14,1,3,13,12,11,10,9,8,0,7,'PPYxC',
+        5,6,'EkeqE',5,4,2021,3,2,1,1,
+            [
+                # Reference table interpreted using the previous codes
+                "java.util.Vector/3057315478",
+                "cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399",
+                "java.lang.Integer/3438268394","2","java.lang.Long/4227064769",
+                "SINOBS","DRCP","Vigente","AMBOS","29",
+                "F29 - Declaración Mensual y Pago Simultáneo de Impuestos",
+                "Declaración Mensual y Pago Simultáneo de Impuestos","MES",
+                "DPS","G1515000gym","MPD_PLANT","16/04/2021","669642240",
+                "CLP","2021-04-19 18:42:20.0","N","OPVPHHA","M03","CRCIVA"
+            ]
+        # Flags returned by the service (often unused)
+        ,0
+        # GWT protocol version
+        ,7
+    ]
+
+Instructions summary:
+
+    1. Read the codes from the end backwards. In the example they are
+       ``7, 0, table, 1, 1, 2, 3, ... , -3``.
+    2. The reference table provides values for the numeric codes.
+    3. Codes mean:
+        ``0`` -> ``None``
+        ``0 < x <= len(table)`` -> index of the value in ``table`` (1-based)
+        ``text`` -> integer encoded with :func:`utils.encoder`
+        ``x < 0`` -> reference to a previously parsed object, at ``history[abs(x)-1]``
+    4. If the table item represents a Java object, subsequent codes describe its
+       fields; the object definition dictates how many codes to consume.
+
+Example using the instruction sequence::
+
     1 (ref): "java.util.Vector/3057315478"
-    1 (int): 1 item en el vector. No es referencia solo por que conosemos que anterior fue un vector.
-    2 (ref): "cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399". Objeto java de 37 argumentos.
-        #inicio argumentos
-        3 (ref): "java.lang.Integer/3438268394". Un solo argumento, su valor es el siguiente codigo.
-            2021 (int)  # Argumento 1 de 37
-        4 (ref): "2" #  Argumento 2 de 37
-        5 (ref): "java.lang.Long/4227064769". Un solo argumento.
-            'EkeqE' (string): Codificado en base64=76671620  # Argumento 3 de 37
-
+    1 (int): a vector with one element
+    2 (ref): "cl.sii.sdi.sifm.commons.to.consulta.FolioPeriodoFormularioTO/3253336399"
+        3 (ref): "java.lang.Integer/3438268394"
+            2021 (int)
+        4 (ref): "2"
+        5 (ref): "java.lang.Long/4227064769"
+            'EkeqE' (string) -> 76671620
     ...
-
-    -3 (ref historial): 2021. Al ser negativo nos dice que es el objeto java numero 3 que decodificamos [Vector, FolioPeriodoFormularioTO, Integer (2021)]
-
+    -3 (history ref): value of the third decoded object
 """
+
+
+class Stage(Enum):
+    START = auto()
+    LIST = auto()
+    OBJ = auto()
+
+
+@dataclass
+class Frame:
+    """Represents the state of a partial parse operation."""
+
+    stage: Stage
+    model: Any | None = None
+    parent: "Frame" | None = None
+    key: str | None = None
+    placeholder: int | None = None
+    length: int | None = None
+    index: int = 0
+    model_class: type | None = None
+    fields: list[tuple[str, Any]] = field(default_factory=list)
+    payload: dict[str, Any] = field(default_factory=dict)
+    results: list[Any] = field(default_factory=list)
 
 
 class GwtParser:
-    gwt_models = {"Vector": list, "ArrayList": list,
-                  "Integer": int, "Double": float, "String": str, "Boolean": bool,
-                  "Exception": str,
-                  "Long": models.Long, "Timestamp": models.TimeStamp}
+    gwt_models = {
+        "Vector": list,
+        "ArrayList": list,
+        "Integer": int,
+        "Double": float,
+        "String": str,
+        "Boolean": bool,
+        "Exception": str,
+        "Long": models.Long,
+        "Timestamp": models.TimeStamp,
+    }
 
     def __init__(self, response, gwt_models=None):
-        status, codes, table = gwt_spliter(response)
+        status, codes, table = gwt_splitter(response)
         self.codes = codes
         self.table = table
         self.history = []
         if gwt_models is not None:
             self.gwt_models.update(gwt_models)
 
-    def get_code_value(self, code):
-        match code:
-            case str():
-                value = code
-            case _ if code > len(self.table):
-                value = code
-            case _ if code < 0:
-                value = self.history[abs(code) - 1]
-            case 0:
-                value = None
-            case _:
-                value = self.table[code - 1]
-        return value
+    def get_code_value(self, code: Any) -> Any:
+        """Translate a raw *code* from ``self.codes`` into its Python value."""
+        if isinstance(code, str):
+            return code
+        if code == 0:
+            return None
+        if code < 0:
+            return self.history[abs(code) - 1]
+        if code <= len(self.table):
+            return self.table[code - 1]
+        return code
 
-    def parse_model_type(self, value):
+    def parse_model_type(self, value: Any) -> type | Any:
+        """Return the Python type referenced by *value* from ``self.table``."""
         if not isinstance(value, str):
             return Any
-        elif ";/" in value:  # significa que es una ArrayList del objeto que describe
+        elif ";/" in value:  # indicates an ArrayList of the described object
             return list
 
-        objects = re.findall(r"\.(\w+);?/\d*$", value)
-        if objects:
-            found = objects[0]
-            name = "Exception" if "Exception" in found else found
+        matches = re.findall(r"\.(\w+);?/\d*$", value)
+        if matches:
+            match = matches[0]
+            model_name = "Exception" if "Exception" in match else match
         else:
-            name = value
-        model = self.gwt_models.get(name, Any)
-        if objects and model is Any:
-            raise KeyError(f"Falta modelo {name}")
+            model_name = value
+        model = self.gwt_models.get(model_name, Any)
+        if matches and model is Any:
+            raise KeyError(f"Missing model {model_name}")
         return model
 
-    def parse(self, model=None, place_holder=None):
-        if not self.table:
-            return
+    def _finalize(self, frame: Frame, result: Any, stack: deque[Frame], root: list) -> None:
+        """Store ``result`` and update ``stack`` for the completed ``frame``."""
+
+        stack.pop()
+        if frame.placeholder is not None:
+            self.history[frame.placeholder] = result
+        parent = frame.parent
+        if parent is None:
+            root[0] = result
+        elif parent.stage is Stage.LIST:
+            parent.results.append(result)
+        else:
+            parent.payload[frame.key] = result
+
+    # ------------------------------------------------------------------
+    # Stage handlers
+    # ------------------------------------------------------------------
+    def _handle_start(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.START`` frame."""
+
         code = self.codes.pop()
         value = self.get_code_value(code)
+
         if isinstance(code, int) and code < 0:
-            return value
+            self._finalize(frame, value, stack, root)
+            return
+
         parsed_model = self.parse_model_type(value)
-        container, model = separate_annotation(model)
+        container, model = separate_annotation(frame.model)
         model = container if container else model
+
         if parsed_model is not Any:
             if model is Any or model is None:
                 model = parsed_model
             if model is not parsed_model:
                 value = code
                 parsed_model = Any
-            if not issubclass(parsed_model, BaseModel) and parsed_model is not list and parsed_model is not Any:
+            if (
+                not issubclass(parsed_model, BaseModel)
+                and parsed_model is not list
+                and parsed_model is not Any
+            ):
                 value = self.codes.pop()
                 if parsed_model is str:
                     value = self.get_code_value(value)
 
         if parsed_model is not Any:
-            place_holder = len(self.history)
+            frame.placeholder = len(self.history)
             self.history.append(f"placeholder_{model}")
+
         if value is None:
-            return None
+            self._finalize(frame, None, stack, root)
+            return
+
         if model is list:
             length = self.codes.pop()
-            result = self.parse_list(length)
-        elif issubclass(model, BaseModel):
+            frame.stage = Stage.LIST
+            frame.length = length
+            frame.results = []
+            frame.index = 0
+        elif isinstance(model, type) and issubclass(model, BaseModel):
             if parsed_model is Any:
                 self.codes.append(code)
             fields = get_pydantic_fields(model)
-            payload = {}
-            for field, annotation in fields.items():
-                value = self.parse(annotation)
-                payload[field] = value
-            result = model(**payload)
+            frame.stage = Stage.OBJ
+            frame.fields = list(fields.items())
+            frame.payload = {}
+            frame.index = 0
+            frame.model_class = model
         else:
             result = model(value) if model is not Any and value is not None else value
-        if place_holder is not None:
-            self.history[place_holder] = result
-        return result
+            self._finalize(frame, result, stack, root)
 
-    def parse_list(self, length):
-        results = []
-        for _ in range(length):
-            code = self.codes[-1]
-            value = self.get_code_value(code)
-            model = self.parse_model_type(value)
-            result = self.parse(model=model)
-            results.append(result)
-        return results
+    def _handle_list(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.LIST`` frame."""
+
+        if frame.index >= frame.length:
+            self._finalize(frame, frame.results, stack, root)
+            return
+
+        code = self.codes[-1]
+        value = self.get_code_value(code)
+        model = self.parse_model_type(value)
+        frame.index += 1
+        stack.append(Frame(stage=Stage.START, model=model, parent=frame))
+
+    def _handle_obj(self, frame: Frame, stack: deque[Frame], root: list) -> None:
+        """Process a ``Stage.OBJ`` frame."""
+
+        if frame.index >= len(frame.fields):
+            obj = frame.model_class(**frame.payload)
+            self._finalize(frame, obj, stack, root)
+            return
+
+        field, annotation = frame.fields[frame.index]
+        frame.index += 1
+        stack.append(
+            Frame(stage=Stage.START, model=annotation, parent=frame, key=field)
+        )
+
+    def parse(self, model: Any | None = None) -> Any:
+        """Decode the next value from ``self.codes`` using an optional annotation."""
+        if not self.table:
+            return None
+
+        stack = deque([Frame(stage=Stage.START, model=model)])
+        root = [None]
+
+        while stack:
+            frame = stack[-1]
+            if frame.stage is Stage.START:
+                self._handle_start(frame, stack, root)
+            elif frame.stage is Stage.LIST:
+                self._handle_list(frame, stack, root)
+            else:
+                self._handle_obj(frame, stack, root)
+
+        return root[0]
